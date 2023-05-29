@@ -97,7 +97,7 @@ def main():
     cell_edge = []
     for (n1, n2), (c1, c2) in edges.items():
         cell_edge += [f'(cell-edge c-{c1} c-{c2} n-{n1} n-{n2})']
-        not_linked += [f'(not-linked n-{n1} n-{n2})']
+        #not_linked += [f'(not-linked n-{n1} n-{n2})']
 
     goal_cap = []
     for c, clue in clues.items():
