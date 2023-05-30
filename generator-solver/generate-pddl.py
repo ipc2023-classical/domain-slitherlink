@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 
+####
+# The get_puzzle() function is adapted from https://github.com/pinkston3/slitherlink
+# It was written by Donnie Pinkston and licensed under GPLv3
+#
+# The rest is in public domain.
+
 import sys
 import os
 import requests
@@ -30,9 +36,6 @@ TOPDIR = os.path.dirname(os.path.realpath(__file__))
 #        13 = special daily loop
 #        12 = special weekly loop
 #        14 = special monthly loop
-
-#get_puzzle('http://www.puzzle-loop.com/?v=0&size=5')
-#get_puzzle('http://www.puzzle-loop.com/?v=0')
 def get_puzzle(page_url):
     page = requests.get(page_url)
     soup = BeautifulSoup(page.text, 'html.parser')
@@ -223,13 +226,66 @@ def generate(rows, cols):
 
     os.unlink('tmp.gen.prob')
     os.unlink('tmp.gen.sol')
+    return 0
+
+def download(spec):
+    spec_map = {
+        '5x5 normal' : None,
+        '5x5 hard' : '4',
+        '7x7 normal' : '10',
+        '7x7 hard' : '11',
+        '10x10 normal' : '1',
+        '10x10 hard' : '5',
+        '15x15 normal' : '2',
+        '15x15 hard' : '6',
+        '20x20 normal' : '3',
+        '20x20 hard' : '7',
+        '25x30 normal' : '8',
+        '25x30 hard' : '9',
+        'special daily loop' : '13',
+        'special weekly loop' : '12',
+        'special monthly loop' : '14',
+    }
+
+    if spec not in spec_map:
+        print(f'Error: Unkown "{spec}"', file = sys.stderr)
+        return -1
+
+    url = 'http://www.puzzle-loop.com/?v=0'
+    s = spec_map[spec]
+    if s is not None:
+        url += f'&size={s}'
+
+    puzzle = get_puzzle(url)
+    with open('tmp.gen.prob', 'w') as fout:
+        for row in puzzle:
+            fout.write(row + '\n')
+
+    cmd = f'{TOPDIR}/solve tmp.gen.prob 100 >tmp.gen.sol'
+    ret = os.system(cmd)
+    assert(ret == 0)
+
+    with open('tmp.gen.sol', 'r') as fin:
+        for line in fin:
+            line = line.strip('\n')
+            if line.startswith('Showing up to'):
+                continue
+            print(f';; {line}')
+
+    txtToPddl(puzzle)
+
+    os.unlink('tmp.gen.prob')
+    os.unlink('tmp.gen.sol')
 
 
 if __name__ == '__main__':
-    sys.exit(generate(int(sys.argv[1]), int(sys.argv[2])))
-
-    if len(sys.argv) != 2:
-        print('Usage: {0} puzzle.txt >prob.pddl'.format(sys.argv[0]), file = sys.stderr)
+    if len(sys.argv) not in [4, 3]:
+        print('Usage: {0} gen num-rows num-colst >prob.pddl'.format(sys.argv[0]), file = sys.stderr)
+        print('       {0} download spec >prob.pddl'.format(sys.argv[0]), file = sys.stderr)
         sys.exit(-1)
-    sys.exit(main(sys.argv[1]))
+
+    if sys.argv[1] == 'gen':
+        sys.exit(generate(int(sys.argv[2]), int(sys.argv[3])))
+    elif sys.argv[1] == 'download':
+        sys.exit(download(sys.argv[2]))
 

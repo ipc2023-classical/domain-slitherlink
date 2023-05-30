@@ -1,0 +1,4 @@
+*.hi
+*.o
+generate
+solve
