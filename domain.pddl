@@ -22,8 +22,25 @@
     (cell-edge ?c1 ?c2 - cell ?n1 ?n2 - node)
     ;; ?n1 and ?n2 are (slither)linked
     (linked ?n1 ?n2 - node)
+    ;; Disables link-0-0 action after its first use
+    (disable-link-0-0)
 )
 
+;; This action is used only at the beginning of a plan. Disabling it (using
+;; the predicate disable-link-0-0) after its first use ensures that the
+;; solution is a single cycle.
+;; Without it, the plan could produce several closed loops. For example:
+;; input:      possible incorrect solution:     correct solution:
+;; + + + +                +-+ + +                   +-+-+-+
+;;  3 . .                 |3|. .                    |3 . .|
+;; + + + +                + + +-+                   +-+ +-+
+;;  . . 3                 |.|.|3|                    .|.|3 
+;; + + + +                +-+ + +                   +-+ +-+
+;;  . 1 3                  . 1|3|                   |. 1 3|
+;; + + + +                + + +-+                   +-+-+-+
+;;
+;; Another possibility would be to remove this action entirely and put one or
+;; more starting links in the initial state.
 (:action link-0-0
     :parameters (?n1 - node ?n2 - node
                  ?c1 - cell ?c1capfrom ?c1capto - cell-capacity-level
@@ -38,6 +55,7 @@
             (cell-capacity ?c2 ?c2capfrom)
             (cell-capacity-inc ?c1capto ?c1capfrom)
             (cell-capacity-inc ?c2capto ?c2capfrom)
+            (not (disable-link-0-0))
         )
     :effect
         (and
@@ -54,6 +72,8 @@
 
             (not (cell-capacity ?c2 ?c2capfrom))
             (cell-capacity ?c2 ?c2capto)
+
+            (disable-link-0-0)
         )
 )
 
