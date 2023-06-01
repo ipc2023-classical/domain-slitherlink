@@ -8,15 +8,12 @@
 
 import sys
 import os
-import requests
 import random
 import copy
-from bs4 import BeautifulSoup
 
 TOPDIR = os.path.dirname(os.path.realpath(__file__))
 
 def solveCP(fn):
-
     cols = 0
     rows = 0
     clues = {}
@@ -156,6 +153,8 @@ def solveCP(fn):
 #        12 = special weekly loop
 #        14 = special monthly loop
 def get_puzzle(page_url):
+    import requests
+    from bs4 import BeautifulSoup
     page = requests.get(page_url)
     soup = BeautifulSoup(page.text, 'html.parser')
 
@@ -183,7 +182,7 @@ def get_puzzle(page_url):
     return row_specs
 
 class Prob(object):
-    def __init__(self, use_start_edge = True):
+    def __init__(self, use_start_edge = False):
         self.use_start_edge = use_start_edge
         self.puzzles = []
         self.solutions = []
@@ -490,20 +489,30 @@ class Prob(object):
         os.unlink('tmp.gen.sol')
         return 0
 
+    def optimalCost(self):
+        cost = sum([len(sol) for sol in self.plans])
+        if self.use_start_edge:
+            cost -= len(self.plans)
+        return cost
 
-def generate(rows, cols, fnpddl, fnplan):
-    prob = Prob()
 
-    for i in range(2):
+def generate(rows, cols, fnpddl, fnplan, parallel = 1):
+    prob = Prob(use_start_edge = (parallel > 1))
+
+    for i in range(parallel):
         prob.addGen(rows, cols)
 
     out = prob.toPddl()
     with open(fnpddl, 'w') as fout:
+        fout.write(';; {0}\n'.format(' '.join(sys.argv)))
+        fout.write(';;\n')
         fout.write(out)
+
+    with open(fnplan, 'w') as fout:
+        fout.write(';; Optimal cost: {0}\n'.format(prob.optimalCost()))
     return 0
 
 def download(spec, fnpddl, fnplan):
-    pddlout = open(fnpddl, 'w')
     spec_map = {
         '5x5 normal' : None,
         '5x5 hard' : '4',
@@ -540,28 +549,41 @@ def download(spec, fnpddl, fnplan):
     ret = os.system(cmd)
     assert(ret == 0)
 
+    solution = []
     with open('tmp.gen.sol', 'r') as fin:
         for line in fin:
-            line = line.strip('\n')
-            if line.startswith('Showing up to'):
+            if len(line) == 0 or line[0] not in ['+', '|', ' ']:
                 continue
-            print(f';; {line}', file = pddlout)
+            line = line.strip('\n')
+            solution += [line]
 
-    txtToPddl(puzzle, pddlout)
+    prob = Prob()
+    prob.add(puzzle, solution)
+
+    out = prob.toPddl()
+    with open(fnpddl, 'w') as fout:
+        fout.write(';; {0}\n'.format(' '.join(sys.argv)))
+        fout.write(';;\n')
+        fout.write(out)
+
+    with open(fnplan, 'w') as fout:
+        fout.write(';; Optimal cost: {0}\n'.format(prob.optimalCost()))
 
     os.unlink('tmp.gen.prob')
     os.unlink('tmp.gen.sol')
-    pddlout.close()
 
 
 if __name__ == '__main__':
-    if len(sys.argv) not in [6, 5]:
+    if len(sys.argv) not in [7, 6, 5]:
         print('Usage: {0} gen num-rows num-colst prob.pddl prob.plan'.format(sys.argv[0]), file = sys.stderr)
+        print('       {0} gen-parallel num-parallel num-rows num-colst prob.pddl prob.plan'.format(sys.argv[0]), file = sys.stderr)
         print('       {0} download spec prob.pddl prob.plan'.format(sys.argv[0]), file = sys.stderr)
         sys.exit(-1)
 
     if sys.argv[1] == 'gen':
         sys.exit(generate(int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], sys.argv[5]))
+    elif sys.argv[1] == 'gen-parallel':
+        sys.exit(generate(int(sys.argv[3]), int(sys.argv[4]), sys.argv[5], sys.argv[6], parallel = int(sys.argv[2])))
     elif sys.argv[1] == 'download':
         sys.exit(download(sys.argv[2], sys.argv[3], sys.argv[4]))
 
