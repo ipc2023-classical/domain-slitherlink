@@ -10,6 +10,7 @@ import sys
 import os
 import requests
 import random
+import copy
 from bs4 import BeautifulSoup
 
 TOPDIR = os.path.dirname(os.path.realpath(__file__))
@@ -181,114 +182,254 @@ def get_puzzle(page_url):
 
     return row_specs
 
-def txtToPddl(puzzle, out = sys.stdout):
-    rows = len(puzzle)
-    cols = len(puzzle[0])
+class Prob(object):
+    def __init__(self, use_start_edge = True):
+        self.use_start_edge = use_start_edge
+        self.puzzles = []
+        self.solutions = []
+        self.capacity = [f'cap-{i}' for i in range(5)]
+        self.capacity_inc = []
+        for i in range(4):
+            self.capacity_inc += ['(cell-capacity-inc cap-{0} cap-{1})'.format(i, i + 1)]
 
-    nodes = []
-    for r in range(rows + 1):
-        for c in range(cols + 1):
-            nodes += [f'n-{r}-{c}']
+        self.nodes = []
+        self.cells = []
+        self.cell_capacity = []
+        self.node_degree0 = []
+        self.cell_edge = []
+        self.nodegoal = []
+        self.goal_cap = []
+        self.linked = []
 
-    cells = []
-    for r in range(rows):
-        for c in range(cols):
-            cells += [f'cell-{r}-{c}']
+        self.plans = []
 
-    goal_cap = []
-    cell_capacity = []
-    for i, row in enumerate(puzzle):
-        for j, c in enumerate(row):
-            if c != '.':
-                cap = int(c)
-                cell_capacity += [f'(cell-capacity cell-{i}-{j} cap-{cap})']
-                goal_cap += [f'(cell-capacity cell-{i}-{j} cap-0)']
+    def _chainPlan(self, plan):
+        out = [plan[0]]
+        nxt = plan[0][1]
+        while len(out) != len(plan):
+            found = False
+            for step in plan:
+                if step in out:
+                    continue
+                if nxt == step[0]:
+                    out += [step]
+                    nxt = step[1]
+                    found = True
+                    break
+                elif nxt == step[1]:
+                    out += [step]
+                    nxt = step[0]
+                    found = True
+                    break
+            if not found:
+                print('PLAN IS INVALID!', file = sys.stderr)
+                print(plan)
+                sys.exit(-1)
+        return out
+
+    def add(self, puzzle, solution):
+        IDX = ''
+        if len(self.puzzles) > 0:
+            IDX = str(len(self.puzzles))
+
+        self.puzzles += [copy.deepcopy(puzzle)]
+        self.solutions += [copy.deepcopy(solution)]
+
+        rows = len(puzzle)
+        cols = len(puzzle[0])
+
+        plan = []
+        for ri, srow in enumerate(solution):
+            if ri % 2 == 0:
+                for i in range(1, len(srow), 2):
+                    if srow[i] == '-':
+                        plan += [((ri // 2, i // 2), (ri // 2, i // 2 + 1))]
             else:
-                cell_capacity += [f'(cell-capacity cell-{i}-{j} cap-4)']
+                for i in range(0, len(srow) + 1, 2):
+                    if srow[i] == '|':
+                        plan += [((ri // 2, i // 2), (ri // 2 + 1, i // 2))]
+        plan = self._chainPlan(plan)
+        self.plans += [plan]
 
-    for r in range(rows):
-        cells += [f'cell-outside-{r}-left']
-        cell_capacity += [f'(cell-capacity cell-outside-{r}-left cap-1)']
-        cells += [f'cell-outside-{r}-right']
-        cell_capacity += [f'(cell-capacity cell-outside-{r}-right cap-1)']
-    for c in range(cols):
-        cells += [f'cell-outside-{c}-up']
-        cell_capacity += [f'(cell-capacity cell-outside-{c}-up cap-1)']
-        cells += [f'cell-outside-{c}-down']
-        cell_capacity += [f'(cell-capacity cell-outside-{c}-down cap-1)']
+        start_edge = ['', '']
+        if self.use_start_edge:
+            start_edge = [f'n{IDX}-{{0}}-{{1}}'.format(plan[0][0][0], plan[0][0][1]),
+                          f'n{IDX}-{{0}}-{{1}}'.format(plan[0][1][0], plan[0][1][1])]
+            self.linked += ['(linked {0} {1})'.format(*start_edge)]
 
-    cell_edge = []
-    for r in range(1, rows):
+        nodes = []
+        for r in range(rows + 1):
+            for c in range(cols + 1):
+                nodes += [f'n{IDX}-{r}-{c}']
+
+        cell_edge = []
+        for r in range(1, rows):
+            for c in range(cols):
+                upcell = f'cell{IDX}-{r - 1}-{c}'
+                downcell = f'cell{IDX}-{r}-{c}'
+                cto = c + 1
+                cell_edge += [f'(cell-edge {upcell} {downcell} n{IDX}-{r}-{c} n{IDX}-{r}-{cto})']
         for c in range(cols):
-            upcell = 'cell-{0}-{1}'.format(r - 1, c)
-            downcell = 'cell-{0}-{1}'.format(r, c)
+            r = 0
+            upcell = f'cell{IDX}-outside-{c}-up'
+            downcell = f'cell{IDX}-{r}-{c}'
             cto = c + 1
-            cell_edge += [f'(cell-edge {upcell} {downcell} n-{r}-{c} n-{r}-{cto})']
-    for c in range(cols):
-        r = 0
-        upcell = f'cell-outside-{c}-up'
-        downcell = 'cell-{0}-{1}'.format(r, c)
-        cto = c + 1
-        cell_edge += [f'(cell-edge {upcell} {downcell} n-{r}-{c} n-{r}-{cto})']
+            cell_edge += [f'(cell-edge {upcell} {downcell} n{IDX}-{r}-{c} n{IDX}-{r}-{cto})']
 
-        r = rows
-        upcell = 'cell-{0}-{1}'.format(r - 1, c)
-        downcell = f'cell-outside-{c}-down'
-        cto = c + 1
-        cell_edge += [f'(cell-edge {upcell} {downcell} n-{r}-{c} n-{r}-{cto})']
-    for c in range(1, cols):
+            r = rows
+            upcell = f'cell{IDX}-{r - 1}-{c}'
+            downcell = f'cell{IDX}-outside-{c}-down'
+            cto = c + 1
+            cell_edge += [f'(cell-edge {upcell} {downcell} n{IDX}-{r}-{c} n{IDX}-{r}-{cto})']
+        for c in range(1, cols):
+            for r in range(rows):
+                leftcell = f'cell{IDX}-{r}-{c - 1}'
+                rightcell = f'cell{IDX}-{r}-{c}'
+                rto = r + 1
+                cell_edge += [f'(cell-edge {leftcell} {rightcell} n{IDX}-{r}-{c} n{IDX}-{rto}-{c})']
         for r in range(rows):
-            leftcell = 'cell-{0}-{1}'.format(r, c - 1)
-            rightcell = 'cell-{0}-{1}'.format(r, c)
+            c = 0
+            leftcell = f'cell{IDX}-outside-{r}-left'
+            rightcell = f'cell{IDX}-{r}-{c}'
             rto = r + 1
-            cell_edge += [f'(cell-edge {leftcell} {rightcell} n-{r}-{c} n-{rto}-{c})']
-    for r in range(rows):
-        c = 0
-        leftcell = 'cell-outside-{0}-left'.format(r)
-        rightcell = 'cell-{0}-{1}'.format(r, c)
-        rto = r + 1
-        cell_edge += [f'(cell-edge {leftcell} {rightcell} n-{r}-{c} n-{rto}-{c})']
+            cell_edge += [f'(cell-edge {leftcell} {rightcell} n{IDX}-{r}-{c} n{IDX}-{rto}-{c})']
 
-        c = cols
-        leftcell = 'cell-{0}-{1}'.format(r, c - 1)
-        rightcell = 'cell-outside-{0}-right'.format(r)
-        rto = r + 1
-        cell_edge += [f'(cell-edge {leftcell} {rightcell} n-{r}-{c} n-{rto}-{c})']
+            c = cols
+            leftcell = f'cell{IDX}-{r}-{c - 1}'
+            rightcell = f'cell{IDX}-outside-{r}-right'
+            rto = r + 1
+            cell_edge += [f'(cell-edge {leftcell} {rightcell} n{IDX}-{r}-{c} n{IDX}-{rto}-{c})']
 
-    capacity = [f'cap-{i}' for i in range(5)]
-    capacity_inc = []
-    for i in range(4):
-        capacity_inc += ['(cell-capacity-inc cap-{0} cap-{1})'.format(i, i + 1)]
+        lowercap = []
+        if self.use_start_edge:
+            for c in cell_edge:
+                if start_edge[0] in c and start_edge[1] in c:
+                    s = c.split()
+                    lowercap += [s[1], s[2]]
 
-    node_degree0 = [f'(node-degree0 {n})' for n in nodes]
+        goal_cap = []
+        cell_capacity = []
+        cells = []
+        for r in range(rows):
+            for c in range(cols):
+                cells += [f'cell{IDX}-{r}-{c}']
+        for r in range(rows):
+            cap = 'cap-1'
+            cell = f'cell{IDX}-outside-{r}-left'
+            if cell in lowercap:
+                cap = 'cap-0'
+            cells += [cell]
+            cell_capacity += [f'(cell-capacity {cell} {cap})']
 
-    nodefree = []
-    nodegoal = []
-    for n in nodes:
-        nodefree += [f'(node-degree0 {n})']
-        nodegoal += [f'(not (node-degree1 {n}))']
-    nodefree = sorted(nodefree)
-    nodegoal = sorted(nodegoal)
+            cap = 'cap-1'
+            cell = f'cell{IDX}-outside-{r}-right'
+            if cell in lowercap:
+                cap = 'cap-0'
+            cells += [cell]
+            cell_capacity += [f'(cell-capacity {cell} {cap})']
 
-    capacity = ' '.join(capacity)
-    nodes = ' '.join(nodes)
-    cells = ' '.join(cells)
+        for c in range(cols):
+            cap = 'cap-1'
+            cell = f'cell{IDX}-outside-{c}-up'
+            if cell in lowercap:
+                cap = 'cap-0'
+            cells += [cell]
+            cell_capacity += [f'(cell-capacity {cell} {cap})']
 
-    capacity_inc = '\n    '.join(capacity_inc)
-    cell_capacity = '\n    '.join(cell_capacity)
-    node_degree0 = '\n    '.join(node_degree0)
-    cell_edge = '\n    '.join(cell_edge)
+            cap = 'cap-1'
+            cell = f'cell{IDX}-outside-{c}-down'
+            if cell in lowercap:
+                cap = 'cap-0'
+            cells += [cell]
+            cell_capacity += [f'(cell-capacity {cell} {cap})']
 
-    nodegoal = '\n        '.join(nodegoal)
-    goal_cap = '\n        '.join(goal_cap)
+        for i, row in enumerate(puzzle):
+            for j, c in enumerate(row):
+                cell = f'cell{IDX}-{i}-{j}'
+                cap = 4
+                if c != '.':
+                    cap = int(c)
+                    goal_cap += [f'(cell-capacity {cell} cap-0)']
+                if cell in lowercap:
+                    cap -= 1
+                cell_capacity += [f'(cell-capacity {cell} cap-{cap})']
 
-    header = ''
-    #for row in puzzle:
-    #    header += f';; |{row}|\n'
 
-    rand = int(1000000 * random.random())
-    s = f'''{header}
-(define (problem sliterlink-{rows}-{cols}-{rand})
+        node_degree0 = []
+        for n in nodes:
+            if n in start_edge:
+                node_degree0 += [f'(node-degree1 {n})']
+            else:
+                node_degree0 += [f'(node-degree0 {n})']
+
+        nodegoal = []
+        for n in nodes:
+            nodegoal += [f'(not (node-degree1 {n}))']
+        nodegoal = sorted(nodegoal)
+
+        self.nodes += nodes
+        self.cells += cells
+        self.cell_capacity += cell_capacity
+        self.node_degree0 += node_degree0
+        self.cell_edge += cell_edge
+        self.nodegoal += nodegoal
+        self.goal_cap += goal_cap
+
+    def toPddl(self):
+        capacity = ' '.join(self.capacity)
+        nodes = ' '.join(self.nodes)
+        cells = ' '.join(self.cells)
+
+        capacity_inc = '\n    '.join(self.capacity_inc)
+        cell_capacity = '\n    '.join(self.cell_capacity)
+        node_degree0 = '\n    '.join(self.node_degree0)
+        cell_edge = '\n    '.join(self.cell_edge)
+
+        nodegoal = '\n        '.join(self.nodegoal)
+        goal_cap = '\n        '.join(self.goal_cap)
+
+        hcols = [len(x[0]) for x in self.puzzles]
+        hcols += [len(x[0]) for x in self.solutions]
+        hcols = max(hcols)
+        assert(len(self.puzzles) == len(self.solutions))
+
+        header = ''
+        hrows = max([len(x) for x in self.puzzles])
+        for row in range(hrows):
+            header += ';;'
+            for puzzle in self.puzzles:
+                header += '  '
+                if row < len(puzzle):
+                    header += puzzle[row]
+                    for _ in range(len(puzzle[row]), hcols):
+                        header += ' '
+                else:
+                    for _ in range(hcols):
+                        header += ' '
+            header += '\n'
+
+        header += ';;\n'
+        hrows = max([len(x) for x in self.solutions])
+        for row in range(hrows):
+            header += ';;'
+            for solution in self.solutions:
+                header += '  '
+                if row < len(solution):
+                    header += solution[row]
+                    for _ in range(len(solution[row]), hcols):
+                        header += ' '
+                else:
+                    for _ in range(hcols):
+                        header += ' '
+            header += '\n'
+
+        linked = copy.deepcopy(self.linked)
+        if self.use_start_edge:
+            linked += ['(disable-link-0-0)']
+        linked = '\n    '.join(linked)
+        rand = int(1000000 * random.random())
+        s = f'''{header}
+(define (problem sliterlink-{rand})
 (:domain slitherlink)
 
 (:objects
@@ -305,6 +446,8 @@ def txtToPddl(puzzle, out = sys.stdout):
     {node_degree0}
 
     {cell_edge}
+
+    {linked}
 )
 (:goal
     (and
@@ -317,36 +460,46 @@ def txtToPddl(puzzle, out = sys.stdout):
 
 
 '''
-    print(s, file = out)
+        return s
+
+    def addGen(self, rows, cols):
+        prog = os.path.join(TOPDIR, 'generate')
+        if not os.path.isfile(prog):
+            print(f'Error: Missing program {prog}', file = sys.stderr)
+            return -1
+
+        cmd = f'{prog} {rows} {cols} tmp.gen.prob tmp.gen.sol'
+        ret = os.system(cmd)
+        assert(ret == 0)
+
+        puzzle = []
+        with open('tmp.gen.prob', 'r') as fin:
+            for line in fin:
+                line = line.strip('\n')
+                puzzle += [line]
+
+        solution = []
+        with open('tmp.gen.sol', 'r') as fin:
+            for line in fin:
+                line = line.strip('\n')
+                solution += [line]
+
+        self.add(puzzle, solution)
+
+        os.unlink('tmp.gen.prob')
+        os.unlink('tmp.gen.sol')
+        return 0
+
 
 def generate(rows, cols, fnpddl, fnplan):
-    pddlout = open(fnpddl, 'w')
-    prog = os.path.join(TOPDIR, 'generate')
-    if not os.path.isfile(prog):
-        print(f'Error: Missing program {prog}', file = sys.stderr)
-        return -1
+    prob = Prob()
 
-    cmd = f'{prog} {rows} {cols} tmp.gen.prob tmp.gen.sol'
-    ret = os.system(cmd)
-    assert(ret == 0)
+    for i in range(2):
+        prob.addGen(rows, cols)
 
-    puzzle = []
-    with open('tmp.gen.prob', 'r') as fin:
-        for line in fin:
-            line = line.strip('\n')
-            puzzle += [line]
-
-    with open('tmp.gen.sol', 'r') as fin:
-        for line in fin:
-            line = line.strip('\n')
-            print(f';; {line}', file = pddlout)
-
-    solveCP('tmp.gen.prob')
-    txtToPddl(puzzle, pddlout)
-
-    os.unlink('tmp.gen.prob')
-    os.unlink('tmp.gen.sol')
-    pddlout.close()
+    out = prob.toPddl()
+    with open(fnpddl, 'w') as fout:
+        fout.write(out)
     return 0
 
 def download(spec, fnpddl, fnplan):

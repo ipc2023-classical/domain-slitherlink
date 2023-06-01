@@ -2,16 +2,24 @@
 
 import sys
 
-def main():
+def main(plan_fn, idx = ''):
+    NODE_NAME = 'n' + idx
+    if NODE_NAME == 'n0':
+        NODE_NAME = 'n'
+
     row_edge = []
     col_edge = []
     cols = 0
     rows = 0
-    for line in sys.stdin:
+    fin = open(plan_fn, 'r')
+    for line in fin:
         if line.startswith('(link-'):
             s = line.split()
-            _, n1row, n1col = s[1].split('-')
-            _, n2row, n2col = s[2].split('-')
+            name, n1row, n1col = s[1].split('-')
+            name2, n2row, n2col = s[2].split('-')
+            assert(name == name2)
+            if name != NODE_NAME:
+                continue
             n1row = int(n1row)
             n1col = int(n1col)
             n2row = int(n2row)
@@ -25,6 +33,7 @@ def main():
 
             rows = max(rows, n1row + 1, n2row + 1)
             cols = max(cols, n1col + 1, n2col + 1)
+    fin.close()
 
     out = []
     for i in range(2 * rows - 1):
@@ -55,4 +64,8 @@ def main():
         print(''.join(row))
 
 if __name__ == '__main__':
-    sys.exit(main())
+    if len(sys.argv) not in [2, 3]:
+        print('Usage: {0} problem.plan [sub-idx]'.format(sys.argv[0]), file = sys.stderr)
+        sys.exit(-1)
+
+    sys.exit(main(*sys.argv[1:]))
