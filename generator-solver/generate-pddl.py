@@ -14,6 +14,124 @@ from bs4 import BeautifulSoup
 
 TOPDIR = os.path.dirname(os.path.realpath(__file__))
 
+def solveCP(fn):
+
+    cols = 0
+    rows = 0
+    clues = {}
+    with open(fn, 'r') as fin:
+        for row, line in enumerate(fin):
+            line = line.strip()
+            if len(line) == 0:
+                break
+
+            rows += 1
+            for col, c in enumerate(line):
+                cols = max(cols, col + 1)
+                if c != '.':
+                    clues[(row, col)] = int(c)
+
+    from docplex.cp.model import CpoModel
+    m = CpoModel()
+
+    edge = []
+    horizontal = []
+    for row in range(rows + 1):
+        hr = []
+        for col in range(cols):
+            v = m.binary_var(f'he-{row}-{col}')
+            edge += [v]
+            hr += [v]
+        horizontal += [hr]
+
+    vertical = []
+    for row in range(rows):
+        r = []
+        for col in range(cols + 1):
+            v = m.binary_var(f've-{row}-{col}')
+            edge += [v]
+            r += [v]
+        vertical += [r]
+
+    for row in range(rows):
+        for col in range(cols):
+            if (row, col) in clues:
+                clue = clues[(row, col)]
+                top = horizontal[row][col]
+                bottom = horizontal[row + 1][col]
+                left = vertical[row][col]
+                right = vertical[row][col + 1]
+                m.add(top + bottom + left + right == clue)
+
+    for col in range(1, cols):
+        left = horizontal[0][col - 1]
+        right = horizontal[0][col]
+        bottom = vertical[0][col]
+        m.add((left + right + bottom) != 3)
+        m.add((left + right + bottom) != 1)
+
+        left = horizontal[rows][col - 1]
+        right = horizontal[rows][col]
+        top = vertical[rows - 1][col]
+        m.add((left + right + top) != 3)
+        m.add((left + right + top) != 1)
+
+    for row in range(1, rows):
+        up = vertical[row - 1][0]
+        down = vertical[row][0]
+        right = horizontal[row][0]
+        m.add((up + down + right) != 3)
+        m.add((up + down + right) != 1)
+
+        up = vertical[row - 1][cols]
+        down = vertical[row][cols]
+        left = horizontal[row][cols - 1]
+        m.add(up + down + left != 3)
+        m.add(up + down + left != 1)
+
+    m.add(horizontal[0][0] + vertical[0][0] != 1)
+    m.add(horizontal[0][cols - 1] + vertical[0][cols] != 1)
+    m.add(horizontal[rows][0] + vertical[rows - 1][0] != 1)
+    m.add(horizontal[rows][cols - 1] + vertical[rows - 1][cols] != 1)
+    for row in range(1, rows):
+        for col in range(1, cols):
+            up = vertical[row - 1][col]
+            down = vertical[row][col]
+            left = horizontal[row][col - 1]
+            right = horizontal[row][col]
+            m.add(up + down + left + right != 4)
+            m.add(up + down + left + right != 3)
+            m.add(up + down + left + right != 1)
+
+    m.minimize(m.sum(edge))
+
+    sol = m.solve()
+
+    grid = [[' ' for _ in range(2 * cols + 1)] for __ in range(2 * rows + 1)]
+    for r in range(rows + 1):
+        for c in range(cols + 1):
+            grid[2 * r][2 * c] = '+'
+    for (r, c), v in clues.items():
+        grid[2 * r + 1][2 * c + 1] = str(v)
+
+    if sol:
+        for ri, row in enumerate(horizontal):
+            for ci, e in enumerate(row):
+                if sol[e] > 0:
+                    grid[2 * ri][2 * ci + 1] = '-'
+        for ri, col in enumerate(vertical):
+            for ci, e in enumerate(col):
+                if sol[e] > 0:
+                    grid[2 * ri + 1][2 * ci] = '|'
+
+    s = ''
+    for row in grid:
+        for c in row:
+            s += c
+        s += '\n'
+    return s
+
+
 
 # Only works against the "old version" of the website, since the new version
 # uses client-side Javascript to download and display the puzzle.  The "size"
@@ -63,7 +181,7 @@ def get_puzzle(page_url):
 
     return row_specs
 
-def txtToPddl(puzzle):
+def txtToPddl(puzzle, out = sys.stdout):
     rows = len(puzzle)
     cols = len(puzzle[0])
 
@@ -199,9 +317,10 @@ def txtToPddl(puzzle):
 
 
 '''
-    print(s)
+    print(s, file = out)
 
-def generate(rows, cols):
+def generate(rows, cols, fnpddl, fnplan):
+    pddlout = open(fnpddl, 'w')
     prog = os.path.join(TOPDIR, 'generate')
     if not os.path.isfile(prog):
         print(f'Error: Missing program {prog}', file = sys.stderr)
@@ -220,15 +339,18 @@ def generate(rows, cols):
     with open('tmp.gen.sol', 'r') as fin:
         for line in fin:
             line = line.strip('\n')
-            print(f';; {line}')
+            print(f';; {line}', file = pddlout)
 
-    txtToPddl(puzzle)
+    solveCP('tmp.gen.prob')
+    txtToPddl(puzzle, pddlout)
 
     os.unlink('tmp.gen.prob')
     os.unlink('tmp.gen.sol')
+    pddlout.close()
     return 0
 
-def download(spec):
+def download(spec, fnpddl, fnplan):
+    pddlout = open(fnpddl, 'w')
     spec_map = {
         '5x5 normal' : None,
         '5x5 hard' : '4',
@@ -270,22 +392,23 @@ def download(spec):
             line = line.strip('\n')
             if line.startswith('Showing up to'):
                 continue
-            print(f';; {line}')
+            print(f';; {line}', file = pddlout)
 
-    txtToPddl(puzzle)
+    txtToPddl(puzzle, pddlout)
 
     os.unlink('tmp.gen.prob')
     os.unlink('tmp.gen.sol')
+    pddlout.close()
 
 
 if __name__ == '__main__':
-    if len(sys.argv) not in [4, 3]:
-        print('Usage: {0} gen num-rows num-colst >prob.pddl'.format(sys.argv[0]), file = sys.stderr)
-        print('       {0} download spec >prob.pddl'.format(sys.argv[0]), file = sys.stderr)
+    if len(sys.argv) not in [6, 5]:
+        print('Usage: {0} gen num-rows num-colst prob.pddl prob.plan'.format(sys.argv[0]), file = sys.stderr)
+        print('       {0} download spec prob.pddl prob.plan'.format(sys.argv[0]), file = sys.stderr)
         sys.exit(-1)
 
     if sys.argv[1] == 'gen':
-        sys.exit(generate(int(sys.argv[2]), int(sys.argv[3])))
+        sys.exit(generate(int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], sys.argv[5]))
     elif sys.argv[1] == 'download':
-        sys.exit(download(sys.argv[2]))
+        sys.exit(download(sys.argv[2], sys.argv[3], sys.argv[4]))
 
