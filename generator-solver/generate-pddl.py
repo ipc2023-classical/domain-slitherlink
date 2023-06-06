@@ -586,4 +586,7 @@ if __name__ == '__main__':
         sys.exit(generate(int(sys.argv[3]), int(sys.argv[4]), sys.argv[5], sys.argv[6], parallel = int(sys.argv[2])))
     elif sys.argv[1] == 'download':
         sys.exit(download(sys.argv[2], sys.argv[3], sys.argv[4]))
+    else:
+        print('Invalid command', file = sys.stderr)
+        sys.exit(-1)
 
