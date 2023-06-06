@@ -18,7 +18,7 @@
     (node-degree1 ?n - node)
     ;; The node is connected to exactly two links
     (node-degree2 ?n - node)
-    ;; The edge between nodes ?n1 ?n2 is an edge the cells ?c1 and ?c2
+    ;; The edge between nodes ?n1 ?n2 is an edge bordering cells ?c1 and ?c2
     (cell-edge ?c1 ?c2 - cell ?n1 ?n2 - node)
     ;; ?n1 and ?n2 are (slither)linked
     (linked ?n1 ?n2 - node)
