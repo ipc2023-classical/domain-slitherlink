@@ -39,8 +39,15 @@
 ;;  . 1 3                  . 1|3|                   |. 1 3|
 ;; + + + +                + + +-+                   +-+-+-+
 ;;
-;; Another possibility would be to remove this action entirely and put one or
-;; more starting links in the initial state.
+;; Another possibility would be to remove this action entirely and put one
+;; starting link in the initial state. This can be accomplished without
+;; actually changing this domain file by simply putting (disable-link-0-0)
+;; in the initial state.
+;;
+;; A yet another possibility would be to add a (zero-cost) verification
+;; procedure that traverses the links and makes sure they form a single cycle.
+;; We decided not to go in this direction here.
+;;
 (:action link-0-0
     :parameters (?n1 - node ?n2 - node
                  ?c1 - cell ?c1capfrom ?c1capto - cell-capacity-level
