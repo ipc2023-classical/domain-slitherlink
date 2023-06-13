@@ -189,7 +189,7 @@ class Prob(object):
         self.capacity = [f'cap-{i}' for i in range(5)]
         self.capacity_inc = []
         for i in range(4):
-            self.capacity_inc += ['(cell-capacity-inc cap-{0} cap-{1})'.format(i, i + 1)]
+            self.capacity_inc += ['(CELL-CAPACITY-INC cap-{0} cap-{1})'.format(i, i + 1)]
 
         self.nodes = []
         self.cells = []
@@ -267,37 +267,37 @@ class Prob(object):
                 upcell = f'cell{IDX}-{r - 1}-{c}'
                 downcell = f'cell{IDX}-{r}-{c}'
                 cto = c + 1
-                cell_edge += [f'(cell-edge {upcell} {downcell} n{IDX}-{r}-{c} n{IDX}-{r}-{cto})']
+                cell_edge += [f'(CELL-EDGE {upcell} {downcell} n{IDX}-{r}-{c} n{IDX}-{r}-{cto})']
         for c in range(cols):
             r = 0
             upcell = f'cell{IDX}-outside-{c}-up'
             downcell = f'cell{IDX}-{r}-{c}'
             cto = c + 1
-            cell_edge += [f'(cell-edge {upcell} {downcell} n{IDX}-{r}-{c} n{IDX}-{r}-{cto})']
+            cell_edge += [f'(CELL-EDGE {upcell} {downcell} n{IDX}-{r}-{c} n{IDX}-{r}-{cto})']
 
             r = rows
             upcell = f'cell{IDX}-{r - 1}-{c}'
             downcell = f'cell{IDX}-outside-{c}-down'
             cto = c + 1
-            cell_edge += [f'(cell-edge {upcell} {downcell} n{IDX}-{r}-{c} n{IDX}-{r}-{cto})']
+            cell_edge += [f'(CELL-EDGE {upcell} {downcell} n{IDX}-{r}-{c} n{IDX}-{r}-{cto})']
         for c in range(1, cols):
             for r in range(rows):
                 leftcell = f'cell{IDX}-{r}-{c - 1}'
                 rightcell = f'cell{IDX}-{r}-{c}'
                 rto = r + 1
-                cell_edge += [f'(cell-edge {leftcell} {rightcell} n{IDX}-{r}-{c} n{IDX}-{rto}-{c})']
+                cell_edge += [f'(CELL-EDGE {leftcell} {rightcell} n{IDX}-{r}-{c} n{IDX}-{rto}-{c})']
         for r in range(rows):
             c = 0
             leftcell = f'cell{IDX}-outside-{r}-left'
             rightcell = f'cell{IDX}-{r}-{c}'
             rto = r + 1
-            cell_edge += [f'(cell-edge {leftcell} {rightcell} n{IDX}-{r}-{c} n{IDX}-{rto}-{c})']
+            cell_edge += [f'(CELL-EDGE {leftcell} {rightcell} n{IDX}-{r}-{c} n{IDX}-{rto}-{c})']
 
             c = cols
             leftcell = f'cell{IDX}-{r}-{c - 1}'
             rightcell = f'cell{IDX}-outside-{r}-right'
             rto = r + 1
-            cell_edge += [f'(cell-edge {leftcell} {rightcell} n{IDX}-{r}-{c} n{IDX}-{rto}-{c})']
+            cell_edge += [f'(CELL-EDGE {leftcell} {rightcell} n{IDX}-{r}-{c} n{IDX}-{rto}-{c})']
 
         lowercap = []
         if self.use_start_edge:
@@ -318,14 +318,14 @@ class Prob(object):
             if cell in lowercap:
                 cap = 'cap-0'
             cells += [cell]
-            cell_capacity += [f'(cell-capacity {cell} {cap})']
+            cell_capacity += [f'(CELL-CAPACITY {cell} {cap})']
 
             cap = 'cap-1'
             cell = f'cell{IDX}-outside-{r}-right'
             if cell in lowercap:
                 cap = 'cap-0'
             cells += [cell]
-            cell_capacity += [f'(cell-capacity {cell} {cap})']
+            cell_capacity += [f'(CELL-CAPACITY {cell} {cap})']
 
         for c in range(cols):
             cap = 'cap-1'
@@ -333,14 +333,14 @@ class Prob(object):
             if cell in lowercap:
                 cap = 'cap-0'
             cells += [cell]
-            cell_capacity += [f'(cell-capacity {cell} {cap})']
+            cell_capacity += [f'(CELL-CAPACITY {cell} {cap})']
 
             cap = 'cap-1'
             cell = f'cell{IDX}-outside-{c}-down'
             if cell in lowercap:
                 cap = 'cap-0'
             cells += [cell]
-            cell_capacity += [f'(cell-capacity {cell} {cap})']
+            cell_capacity += [f'(CELL-CAPACITY {cell} {cap})']
 
         for i, row in enumerate(puzzle):
             for j, c in enumerate(row):
@@ -348,10 +348,10 @@ class Prob(object):
                 cap = 4
                 if c != '.':
                     cap = int(c)
-                    goal_cap += [f'(cell-capacity {cell} cap-0)']
+                    goal_cap += [f'(CELL-CAPACITY {cell} cap-0)']
                 if cell in lowercap:
                     cap -= 1
-                cell_capacity += [f'(cell-capacity {cell} cap-{cap})']
+                cell_capacity += [f'(CELL-CAPACITY {cell} cap-{cap})']
 
 
         node_degree0 = []
