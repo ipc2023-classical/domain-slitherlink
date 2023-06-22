@@ -8,13 +8,14 @@ pat_edge = re.compile(r'^edge\(([a-zA-Z_0-9]+), *([a-zA-Z_0-9]+)\)\.$')
 pat_clue = re.compile(r'^clue\(([a-z_A-Z0-9]+), *([0-9]+)\)\.$')
 pat_cell = re.compile(r'^cell_contains\(([a-z_A-Z0-9]+), *([a-zA-Z_0-9]+), *([a-zA-Z_0-9]+)\)\.$')
 
-def main():
+def main(fn):
     edges = {}
     clues = {}
     cells = {}
     cap = {}
 
-    for line in sys.stdin:
+    fin = open(fn, 'r')
+    for line in fin:
         m = pat_edge.match(line.strip())
         if m is not None:
             n1 = m.group(1)
@@ -41,6 +42,7 @@ def main():
                 cells[c] = []
             cells[c] += [(n1, n2)]
             continue
+    fin.close()
 
     for cell, es in cells.items():
         assert(len(es) == len(set(es)))
@@ -115,7 +117,8 @@ def main():
     not_linked = '\n    '.join(not_linked)
     goal_cap = '\n        '.join(goal_cap)
 
-    s = f'''(define (problem sliterlink-xxx)
+    name = fn.split('/')[-1][:-4]
+    s = f'''(define (problem sliterlink-{name})
 (:domain slitherlink)
 
 (:objects
@@ -150,4 +153,4 @@ def main():
     return 0
 
 if __name__ == '__main__':
-    sys.exit(main())
+    sys.exit(main(sys.argv[1]))
